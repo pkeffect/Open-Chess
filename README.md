@@ -1,5 +1,7 @@
 # Node.js Open Chess (v5.1.0)
 
+![open Chess](./images/image-2025-12-16-183403.png)
+
 > [!TIP]  
 > **Give it a try: https://chess.internode.info/**
 
