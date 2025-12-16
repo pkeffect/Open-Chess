@@ -1,5 +1,8 @@
 # Node.js Open Chess (v5.1.0)
 
+> [!TIP]  
+> **Give it a try: https://chess.internode.info/**
+
 A feature-rich, containerized, and modular Chess application built with Node.js, Socket.io, and Vanilla JavaScript. This project features a polished "Marble" UI, drag-and-drop mechanics, real-time multiplayer, and advanced AI integration allowing you to play against Local CPU or Large Language Models (LLMs) via API.
 
 ---
