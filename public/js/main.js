@@ -1,4 +1,4 @@
-// VERSION: 5.1.0
+// VERSION: 5.2.0
 document.addEventListener('DOMContentLoaded', () => {
 
     const ui = new ChessUI();
@@ -27,13 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AUDIO HELPER ---
     function triggerSound(type) {
-        if (!type) {
-            if (game.gameOver) type = 'gameOver';
-            else if (game.lastMove.check) type = 'check';
-            else if (game.lastMove.captured) type = 'capture';
-            else type = 'move';
+        try {
+            if (!type) {
+                if (game.gameOver) type = 'gameOver';
+                else if (game.lastMove.check) type = 'check';
+                else if (game.lastMove.captured) type = 'capture';
+                else type = 'move';
+            }
+            ui.playSound(type);
+        } catch (e) {
+            console.warn("Sound trigger failed, continuing game...", e);
         }
-        ui.playSound(type);
     }
 
     // --- NETWORK SETUP ---
@@ -343,6 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // IMPORTANT: Start the clock BEFORE triggering synchronous AI logic
         clock.start(game.turn);
 
         if (triggerAI && game.turn === 'black') {
@@ -356,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ui.setLoading(true);
                 }
 
+                // setTimeout allows the UI to render the clock start before blocking the thread
                 setTimeout(runBasicCPU, 100);
             }
             else if (opponentMode === 'llm') {
@@ -371,6 +377,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (game.gameOver) return;
 
         const difficulty = ui.getDifficulty();
+        // This calculateBestMove is blocking.
+        // Because clock.js now uses Delta Time, as soon as this line finishes,
+        // the clock will "jump" to the correct subtracted time.
         const move = basicAI.calculateBestMove(game, difficulty);
 
         if (move) {

@@ -1,4 +1,4 @@
-// VERSION: 5.1.0
+// VERSION: 5.2.0
 class ChessUI {
     constructor() {
         // Board
@@ -20,7 +20,7 @@ class ChessUI {
         this.historyPanel = document.getElementById('history-panel');
         this.copyFenBtn = document.getElementById('btn-copy-fen');
         this.flipBtn = document.getElementById('btn-flip-board');
-        this.readmeBtn = document.getElementById('btn-readme'); // NEW
+        this.readmeBtn = document.getElementById('btn-readme');
 
         // Settings
         this.radioHuman = document.getElementById('vs-human');
@@ -63,8 +63,8 @@ class ChessUI {
         this.drawAcceptBtn = document.getElementById('draw-accept');
         this.drawDeclineBtn = document.getElementById('draw-decline');
 
-        this.readmeModal = document.getElementById('readme-modal'); // NEW
-        this.readmeClose = document.querySelector('.readme-close'); // NEW
+        this.readmeModal = document.getElementById('readme-modal');
+        this.readmeClose = document.querySelector('.readme-close');
 
         this.pieceSymbols = {
             'r': '♜\uFE0E', 'n': '♞\uFE0E', 'b': '♝\uFE0E', 'q': '♛\uFE0E', 'k': '♚\uFE0E', 'p': '♟\uFE0E',
@@ -83,6 +83,8 @@ class ChessUI {
         };
 
         // --- AUDIO ---
+        // We use a set to track sounds that fail to load so we don't keep trying them
+        this.disabledSounds = new Set();
         this.sounds = {
             move: new Audio('audio/beat1.wav'),
             capture: new Audio('audio/fire.wav'),
@@ -91,7 +93,20 @@ class ChessUI {
             gameOver: new Audio('audio/ufo-large.wav'),
             promote: new Audio('audio/thrust.wav')
         };
-        Object.values(this.sounds).forEach(s => s.load());
+
+        // Pre-load attempt (optional, helps browsers cache)
+        Object.values(this.sounds).forEach(s => {
+            s.load();
+            s.onerror = () => {
+                // Determine which key this sound belongs to and disable it
+                for (const [key, val] of Object.entries(this.sounds)) {
+                    if (val === s) {
+                        console.warn(`Audio file missing or corrupt: ${key}. Sound disabled.`);
+                        this.disabledSounds.add(key);
+                    }
+                }
+            };
+        });
 
         // Global Mouse Listeners for Dragging
         document.addEventListener('mousemove', (e) => this.handleDragMove(e));
@@ -103,27 +118,52 @@ class ChessUI {
     }
 
     playSound(type) {
-        const s = this.sounds[type];
-        if (s) {
+        // 1. Safety Check: If we already know this sound is broken, skip immediately
+        if (this.disabledSounds.has(type)) return;
+
+        try {
+            const s = this.sounds[type];
+            // 2. Safety Check: Sound object exists
+            if (!s) return;
+
+            // Reset time to allow rapid replay
             s.currentTime = 0;
-            s.play().catch(e => console.log("Audio play failed (interaction required):", e));
+
+            // 3. Play with Error Handling
+            const playPromise = s.play();
+
+            if (playPromise !== undefined) {
+                playPromise.catch(e => {
+                    // This catches the DOMException (NotSupported, NotSuitable, etc.)
+                    console.warn(`Audio playback failed for '${type}'. Disabling this sound effect.`, e);
+                    this.disabledSounds.add(type);
+                });
+            }
+        } catch (err) {
+            // Catches synchronous errors (e.g., if s is null or not an Audio element)
+            console.error(`Critical audio error for '${type}'. Disabling.`, err);
+            this.disabledSounds.add(type);
         }
     }
 
     // --- BINDING EVENTS ---
-    bindStart(handler) { this.startBtn.addEventListener('click', handler); }
-    bindResign(handler) { this.resignBtn.addEventListener('click', handler); }
-    bindDraw(handler) { this.drawBtn.addEventListener('click', handler); }
+    bindStart(handler) { if (this.startBtn) this.startBtn.addEventListener('click', handler); }
+    bindResign(handler) { if (this.resignBtn) this.resignBtn.addEventListener('click', handler); }
+    bindDraw(handler) { if (this.drawBtn) this.drawBtn.addEventListener('click', handler); }
 
     bindDrawResponses(onAccept, onDecline) {
-        this.drawAcceptBtn.addEventListener('click', () => {
-            this.drawModal.style.display = 'none';
-            onAccept();
-        });
-        this.drawDeclineBtn.addEventListener('click', () => {
-            this.drawModal.style.display = 'none';
-            onDecline();
-        });
+        if (this.drawAcceptBtn) {
+            this.drawAcceptBtn.addEventListener('click', () => {
+                this.drawModal.style.display = 'none';
+                onAccept();
+            });
+        }
+        if (this.drawDeclineBtn) {
+            this.drawDeclineBtn.addEventListener('click', () => {
+                this.drawModal.style.display = 'none';
+                onDecline();
+            });
+        }
     }
 
     bindOpponentChange(handler) {
@@ -132,12 +172,10 @@ class ChessUI {
         });
     }
     bindSettingsChange(handler) {
-        this.llmUrlInput.addEventListener('input', handler);
-        this.llmKeyInput.addEventListener('input', handler);
-        this.llmModelSelect.addEventListener('change', handler);
-
-        // Bind CPU Difficulty Change
-        this.cpuDifficultySelect.addEventListener('change', handler);
+        if (this.llmUrlInput) this.llmUrlInput.addEventListener('input', handler);
+        if (this.llmKeyInput) this.llmKeyInput.addEventListener('input', handler);
+        if (this.llmModelSelect) this.llmModelSelect.addEventListener('change', handler);
+        if (this.cpuDifficultySelect) this.cpuDifficultySelect.addEventListener('change', handler);
     }
     bindRefreshModels(handler) {
         if (this.refreshModelsBtn) this.refreshModelsBtn.addEventListener('click', handler);
@@ -153,36 +191,46 @@ class ChessUI {
         });
     }
     bindCopyFen(game) {
-        this.copyFenBtn.addEventListener('click', () => {
-            const fen = game.toFEN();
-            navigator.clipboard.writeText(fen).then(() => {
-                const originalText = this.copyFenBtn.innerText;
-                this.copyFenBtn.innerText = "Copied!";
-                setTimeout(() => this.copyFenBtn.innerText = originalText, 2000);
+        if (this.copyFenBtn) {
+            this.copyFenBtn.addEventListener('click', () => {
+                const fen = game.toFEN();
+                navigator.clipboard.writeText(fen).then(() => {
+                    const originalText = this.copyFenBtn.innerText;
+                    this.copyFenBtn.innerText = "Copied!";
+                    setTimeout(() => this.copyFenBtn.innerText = originalText, 2000);
+                });
             });
-        });
+        }
     }
     bindFlipBoard(callback) {
-        this.flipBtn.addEventListener('click', () => {
-            this.isFlipped = !this.isFlipped;
-            callback(); // Re-render board
-        });
+        if (this.flipBtn) {
+            this.flipBtn.addEventListener('click', () => {
+                this.isFlipped = !this.isFlipped;
+                callback(); // Re-render board
+            });
+        }
     }
 
     // NEW: README BINDING
     bindShowReadme() {
-        this.readmeBtn.addEventListener('click', () => {
-            this.readmeModal.style.display = 'flex';
-        });
-        this.readmeClose.addEventListener('click', () => {
-            this.readmeModal.style.display = 'none';
-        });
-        // Click outside to close
-        this.readmeModal.addEventListener('click', (e) => {
-            if (e.target === this.readmeModal) {
+        if (this.readmeBtn) {
+            this.readmeBtn.addEventListener('click', () => {
+                this.readmeModal.style.display = 'flex';
+            });
+        }
+        if (this.readmeClose) {
+            this.readmeClose.addEventListener('click', () => {
                 this.readmeModal.style.display = 'none';
-            }
-        });
+            });
+        }
+        // Click outside to close
+        if (this.readmeModal) {
+            this.readmeModal.addEventListener('click', (e) => {
+                if (e.target === this.readmeModal) {
+                    this.readmeModal.style.display = 'none';
+                }
+            });
+        }
     }
 
     // --- P2P BINDINGS ---
